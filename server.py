@@ -26,6 +26,7 @@ from pathlib import Path
 from rag.chroma_store import ChromaStore, list_collections
 from rag.hybrid import build_hybrid
 from rag.llm import is_llm_configured
+from rag.multiquery import MultiQueryRetriever
 from rag.pipeline import run_rag
 
 ROOT_DIR = Path(__file__).resolve().parent
@@ -197,6 +198,12 @@ def main() -> None:
                     f"（BM25 词表 {len(hybrid.bm25.postings):,}，"
                     f"建索引 {time.perf_counter() - built:.1f}s）"
                 )
+
+                # 再挂一个多查询改写后端。注意它每次提问都要多调一次模型，
+                # 所以不设为默认，由用户在前端切换。
+                rw_key = f"{item['name']}+rewrite"
+                RETRIEVERS[rw_key] = MultiQueryRetriever(hybrid, n_variants=3)
+                print(f"[启动] 多查询改写后端：{rw_key}（每次提问 +1 次模型调用）")
 
         if registered:
             # 默认优先混合检索（评测 93% vs 纯向量 88%），其次切片，最后整篇

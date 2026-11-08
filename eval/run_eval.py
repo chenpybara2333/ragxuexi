@@ -25,6 +25,7 @@ sys.path.insert(0, str(ROOT))
 
 from rag.chroma_store import ChromaStore  # noqa: E402
 from rag.hybrid import build_hybrid  # noqa: E402
+from rag.multiquery import MultiQueryRetriever  # noqa: E402
 
 PERSIST = ROOT / "vector_store" / "chroma"
 
@@ -71,25 +72,34 @@ def main() -> None:
     parser.add_argument("--recall-n", type=int, default=50, help="hybrid 模式下每路召回多少条")
     parser.add_argument(
         "--mode",
-        choices=["dense", "hybrid"],
+        choices=["dense", "hybrid", "rewrite"],
         default="dense",
-        help="dense=只用向量；hybrid=BM25 + 向量 + RRF",
+        help="dense=只用向量；hybrid=BM25+向量+RRF；rewrite=多查询改写（会调模型）",
     )
+    parser.add_argument("--n-variants", type=int, default=3, help="rewrite 模式生成几个变体")
     args = parser.parse_args()
 
     questions = load_questions(Path(args.file))
     store = ChromaStore(PERSIST, args.collection)
 
     retriever: object = store
-    if args.mode == "hybrid":
+    if args.mode in ("hybrid", "rewrite"):
         print("[构建] BM25 索引（需要把全部 chunk 重新分词）…")
         built = time.perf_counter()
-        retriever = build_hybrid(store, recall_n=args.recall_n)
-        bm25 = retriever.bm25
+        hybrid = build_hybrid(store, recall_n=args.recall_n)
+        bm25 = hybrid.bm25
         print(
             f"       {bm25.size:,} 条｜词表 {len(bm25.postings):,}｜"
             f"avgdl {bm25.avgdl:.0f}｜耗时 {time.perf_counter() - built:.1f}s"
         )
+        retriever = hybrid
+
+        if args.mode == "rewrite":
+            retriever = MultiQueryRetriever(hybrid, n_variants=args.n_variants)
+            print(
+                f"[构建] 多查询改写：每个问题 {args.n_variants} 个变体 + 原问题，"
+                f"共 {len(questions)} 次模型调用（会比较慢）"
+            )
 
     print(
         f"\n[评测] 集合 {args.collection}｜{store.size:,} 条｜问题 {len(questions)} 条｜"
@@ -207,7 +217,9 @@ def main() -> None:
         "# 检索评测报告",
         "",
         f"- 时间：{time.strftime('%Y-%m-%d %H:%M:%S')}",
-        f"- 模式：`{args.mode}`" + (f"（每路召回 {args.recall_n} 条）" if args.mode == "hybrid" else ""),
+        f"- 模式：`{args.mode}`"
+        + ("（每路召回 %d 条）" % args.recall_n if args.mode in ("hybrid", "rewrite") else "")
+        + ("（每问题 %d 个变体 + 原问题）" % args.n_variants if args.mode == "rewrite" else ""),
         f"- 集合：`{args.collection}`（{store.size:,} 条）",
         f"- 模型：{store.info()['model']}（{store.info()['dim']} 维）",
         f"- 问题集：`{Path(args.file).name}`（{len(records)} 条）",

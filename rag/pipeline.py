@@ -64,7 +64,14 @@ def run_rag(question: str, retriever: Any, top_k: int = 2) -> dict[str, Any]:
     # 要求检索器多返回 2 条：前端才能显示"分数够但排到 Top-K 之外"的证据。
     # 这就是 over_k 状态存在的前提 —— 只看前 top_k 条，永远看不到被截断的那部分。
     fetch_k = min(getattr(retriever, "size", top_k + 2), top_k + 2)
-    all_results = retriever.search(question, top_k=fetch_k)
+
+    # 支持"能带过程信息"的检索器（多查询改写）。普通检索器走 else 分支。
+    # 用能力检测而不是类型判断：以后再加别的检索器，pipeline 不用改。
+    rewrite_trace = None
+    if hasattr(retriever, "search_with_trace"):
+        all_results, rewrite_trace = retriever.search_with_trace(question, top_k=fetch_k)
+    else:
+        all_results = retriever.search(question, top_k=fetch_k)
 
     # 逐篇判定它的去向。三种状态必须区分清楚，否则排查时会误判：
     #   selected  -> 进了 Prompt
@@ -147,6 +154,7 @@ def run_rag(question: str, retriever: Any, top_k: int = 2) -> dict[str, Any]:
     return {
         "question": question,
         "backend": retriever.info(),
+        "query_rewrite": rewrite_trace,
         "retrieval": {
             "query_tokens": query_tokens,
             "top_k": top_k,

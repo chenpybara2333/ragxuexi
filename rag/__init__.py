@@ -23,6 +23,8 @@ __all__ = [
     "chroma_store",
     "bm25",
     "hybrid",
+    "query_rewrite",
+    "multiquery",
     "tokenizer",
     "prompt",
     "llm",

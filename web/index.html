@@ -139,6 +139,14 @@
   .step-title .sub{font-weight:400;color:var(--faint);font-size:11.5px}
 
   .tags{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}
+  .rw{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+  .rw-row{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;font-size:12.5px}
+  .rw-tag{
+    flex:none;font-size:10.5px;padding:1px 6px;border-radius:4px;
+    background:#eef1f5;color:#465063;
+  }
+  .rw-q{color:var(--ink);flex:1;min-width:180px;line-height:1.5}
+  .rw-pids{font-family:var(--mono);font-size:11px;color:var(--faint);white-space:nowrap}
   .tag{
     font-family:var(--mono);font-size:11px;background:#f1f1ee;color:var(--muted);
     border-radius:4px;padding:1px 6px;
@@ -419,12 +427,28 @@
       "</tr>";
     }).join("");
 
-    var tags = d.backend.collection
-      ? '<span class="tag">query → ' + d.backend.dim + " 维稠密向量</span>" +
-        '<span class="tag">cosine</span><span class="tag">HNSW</span>'
-      : d.retrieval.query_tokens.map(function (t) {
-          return '<span class="tag">' + esc(t) + "</span>";
-        }).join("");
+    var isRewrite = !!(d.query_rewrite && d.query_rewrite.queries_used && d.query_rewrite.queries_used.length);
+
+    var tags = isRewrite
+      ? ""
+      : (d.backend.collection
+          ? '<span class="tag">query → ' + d.backend.dim + " 维稠密向量</span>" +
+            '<span class="tag">cosine</span><span class="tag">HNSW</span>'
+          : d.retrieval.query_tokens.map(function (t) {
+              return '<span class="tag">' + esc(t) + "</span>";
+            }).join(""));
+
+    var rwHtml = "";
+    if (isRewrite) {
+      rwHtml = '<div class="rw">' + d.query_rewrite.queries_used.map(function (q, i) {
+        var pv = (d.query_rewrite.per_variant || [])[i] || {};
+        var pids = (pv.top_pids || []).slice(0, 3).join(" / ") || "—";
+        return '<div class="rw-row"><span class="rw-tag">' +
+          (q === d.query_rewrite.original ? "原问题" : "变体 " + i) + "</span>" +
+          '<span class="rw-q">' + esc(q) + "</span>" +
+          '<span class="rw-pids">' + esc(pids) + "</span></div>";
+      }).join("") + "</div>";
+    }
 
     var ctx = d.contexts.length
       ? d.contexts.map(function (x) {
@@ -439,12 +463,15 @@
 
       '<div class="step">' +
         '<div class="step-title"><span class="n">1</span>检索 Retrieval' +
-          '<span class="sub">' + (d.backend.collection
-            ? (d.backend.chunked
-                ? "问题转向量 → HNSW 近邻 → 按 pid 去重 → Top-K"
-                : "问题转向量 → HNSW 近邻 → 取 Top-K")
-            : "问题分词 → 逐篇算相似度 → 取 Top-K") + "</span></div>" +
-        '<div class="tags">' + tags + "</div>" +
+          '<span class="sub">' + (isRewrite
+            ? "问题改写 → 逐变体混合检索 → 二级 RRF"
+            : (d.backend.collection
+                ? (d.backend.chunked
+                    ? "问题转向量 → HNSW 近邻 → 按 pid 去重 → Top-K"
+                    : "问题转向量 → HNSW 近邻 → 取 Top-K")
+                : "问题分词 → 逐篇算相似度 → 取 Top-K")) + "</span></div>" +
+        rwHtml +
+        (tags ? '<div class="tags">' + tags + "</div>" : "") +
         "<table><thead><tr><th></th><th>文档</th><th>相似度（相对最高分）</th><th></th></tr></thead>" +
         "<tbody>" + rows + "</tbody></table>" +
         '<p class="hint">入选 = 进入 Prompt　·　超出 Top-K = 查到了但名额不够　·　低于阈值 = 根本没查到相关内容</p>' +
