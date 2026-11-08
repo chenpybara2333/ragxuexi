@@ -24,6 +24,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from rag.chroma_store import ChromaStore  # noqa: E402
+from rag.hybrid import build_hybrid  # noqa: E402
 
 PERSIST = ROOT / "vector_store" / "chroma"
 
@@ -67,19 +68,40 @@ def main() -> None:
     parser.add_argument("--k", type=int, default=5, help="看前 K 条")
     parser.add_argument("--save", default=str(ROOT / "eval" / "report.md"))
     parser.add_argument("--show-fail", type=int, default=8, help="打印多少条失败样例")
+    parser.add_argument("--recall-n", type=int, default=50, help="hybrid 模式下每路召回多少条")
+    parser.add_argument(
+        "--mode",
+        choices=["dense", "hybrid"],
+        default="dense",
+        help="dense=只用向量；hybrid=BM25 + 向量 + RRF",
+    )
     args = parser.parse_args()
 
     questions = load_questions(Path(args.file))
     store = ChromaStore(PERSIST, args.collection)
 
-    print(f"[评测] 集合 {args.collection}｜{store.size:,} 条｜问题 {len(questions)} 条｜K={args.k}")
+    retriever: object = store
+    if args.mode == "hybrid":
+        print("[构建] BM25 索引（需要把全部 chunk 重新分词）…")
+        built = time.perf_counter()
+        retriever = build_hybrid(store, recall_n=args.recall_n)
+        bm25 = retriever.bm25
+        print(
+            f"       {bm25.size:,} 条｜词表 {len(bm25.postings):,}｜"
+            f"avgdl {bm25.avgdl:.0f}｜耗时 {time.perf_counter() - built:.1f}s"
+        )
+
+    print(
+        f"\n[评测] 集合 {args.collection}｜{store.size:,} 条｜问题 {len(questions)} 条｜"
+        f"K={args.k}｜模式 {args.mode}"
+    )
     print(f"[模型] {store.info()['model']}\n")
 
     records = []
     started = time.perf_counter()
 
     for q in questions:
-        results = store.search(q["question"], top_k=args.k)
+        results = retriever.search(q["question"], top_k=args.k)
         pids = [r.document.doc_id for r in results]
 
         gold = str(q["gold_pid"])
@@ -185,6 +207,7 @@ def main() -> None:
         "# 检索评测报告",
         "",
         f"- 时间：{time.strftime('%Y-%m-%d %H:%M:%S')}",
+        f"- 模式：`{args.mode}`" + (f"（每路召回 {args.recall_n} 条）" if args.mode == "hybrid" else ""),
         f"- 集合：`{args.collection}`（{store.size:,} 条）",
         f"- 模型：{store.info()['model']}（{store.info()['dim']} 维）",
         f"- 问题集：`{Path(args.file).name}`（{len(records)} 条）",
