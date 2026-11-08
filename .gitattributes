@@ -1,0 +1,13 @@
+# 统一行尾为 LF：仓库与工作区一致，避免 Windows / Linux / Docker 之间来回转换
+# 导致"明明没改内容，却整个文件都变红"的 diff 噪音
+* text=auto eol=lf
+
+# 二进制文件禁止做换行转换（否则会损坏）
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.faiss binary
+*.index binary
+*.sqlite3 binary

@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>RAG 学习台 · 阶段 1</title>
+<style>
+  :root{
+    --bg:#f5f5f1;
+    --panel:#ffffff;
+    --line:rgba(20,20,20,.10);
+    --line-strong:rgba(20,20,20,.18);
+    --ink:#1b1f23;
+    --muted:#6a7280;
+    --faint:#949aa3;
+    --accent:#185FA5;
+    --accent-soft:#E6F1FB;
+    --ok:#0F6E56;
+    --ok-soft:#E1F5EE;
+    --warn:#854F0B;
+    --warn-soft:#FAEEDA;
+    --mono:ui-monospace,"Cascadia Code",Consolas,"Courier New",monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+    font-size:14px;line-height:1.6;
+  }
+  .app{display:grid;grid-template-columns:288px 1fr;height:100vh;overflow:hidden}
+
+  /* ---------- 左侧栏 ---------- */
+  .side{
+    background:var(--panel);border-right:1px solid var(--line);
+    padding:18px 16px;display:flex;flex-direction:column;gap:14px;overflow-y:auto;
+  }
+  .brand{display:flex;gap:10px;align-items:center}
+  .logo{
+    width:34px;height:34px;border-radius:9px;background:var(--accent-soft);
+    color:var(--accent);display:flex;align-items:center;justify-content:center;
+    font-weight:500;font-size:13px;letter-spacing:.5px;
+  }
+  .brand-title{font-size:14px;font-weight:500}
+  .brand-sub{font-size:12px;color:var(--faint)}
+
+  .panel{border:1px solid var(--line);border-radius:10px;padding:12px}
+  .panel-title{font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:500}
+  .row{display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:3px 0;color:var(--muted)}
+  .row b{color:var(--ink);font-weight:500;font-variant-numeric:tabular-nums}
+  .badge{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:500}
+  .badge.llm{background:var(--ok-soft);color:var(--ok)}
+  .badge.mock{background:var(--warn-soft);color:var(--warn)}
+  .badge.idle{background:#f1f1ee;color:var(--faint)}
+  .badge.be{background:#eef1f5;color:#465063}
+
+  .segmented{display:flex;gap:4px;background:#f1f1ee;padding:3px;border-radius:8px}
+  .segmented button{
+    flex:1;border:0;background:transparent;padding:5px 0;border-radius:6px;
+    font:inherit;font-size:13px;color:var(--muted);cursor:pointer;
+  }
+  .segmented button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.06)}
+  .hint{font-size:12px;color:var(--faint);margin:8px 0 0;line-height:1.5}
+
+  .doclist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+  .doclist li{font-size:12.5px;color:var(--muted);display:flex;flex-direction:column;gap:1px}
+  .doclist .name{color:var(--ink);word-break:break-all}
+  .doclist .meta{color:var(--faint);font-size:11.5px;font-variant-numeric:tabular-nums}
+  .foot{margin-top:auto;font-size:11.5px;color:var(--faint);padding-top:8px;border-top:1px solid var(--line)}
+
+  /* ---------- 主区 ---------- */
+  .main{display:flex;flex-direction:column;min-width:0;height:100vh}
+  .topbar{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:12px 22px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.7);
+  }
+  .topbar-title{font-size:13px;font-weight:500;color:var(--muted)}
+  .ghost{
+    border:1px solid var(--line-strong);background:transparent;color:var(--muted);
+    padding:5px 12px;border-radius:7px;font:inherit;font-size:12.5px;cursor:pointer;
+  }
+  .ghost:hover{background:#fafaf8;color:var(--ink)}
+
+  .chat{flex:1;overflow-y:auto;padding:22px;display:flex;flex-direction:column;gap:18px}
+
+  .empty{margin:auto;text-align:center;max-width:520px}
+  .empty h1{font-size:16px;font-weight:500;margin:0 0 6px}
+  .empty p{font-size:13px;color:var(--muted);margin:0 0 18px;line-height:1.7}
+  .empty code{
+    font-family:var(--mono);font-size:12.5px;background:#f1f1ee;color:#2a2f36;
+    padding:6px 10px;border-radius:6px;display:inline-block;
+  }
+  .chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+  .chips button{
+    border:1px solid var(--line-strong);background:var(--panel);color:var(--ink);
+    padding:6px 12px;border-radius:20px;font:inherit;font-size:12.5px;cursor:pointer;
+  }
+  .chips button:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+
+  .turn{display:flex;flex-direction:column;gap:10px;max-width:920px;width:100%}
+  .q{
+    align-self:flex-end;max-width:78%;background:var(--accent);color:#fff;
+    padding:9px 14px;border-radius:12px 12px 3px 12px;white-space:pre-wrap;word-break:break-word;
+  }
+  .card{
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:16px 18px;display:flex;flex-direction:column;gap:12px;
+  }
+  .card-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .card-head .who{font-size:12px;color:var(--faint)}
+  .spacer{flex:1}
+  .metric{
+    font-family:var(--mono);font-size:11.5px;color:var(--muted);
+    background:#f6f6f3;border:1px solid var(--line);border-radius:6px;padding:1px 7px;
+    font-variant-numeric:tabular-nums;
+  }
+  .answer{white-space:pre-wrap;word-break:break-word;line-height:1.75}
+  .err{background:var(--warn-soft);color:var(--warn);border-radius:8px;padding:8px 12px;font-size:12.5px;white-space:pre-wrap;word-break:break-word}
+  .notice{
+    background:var(--warn-soft);color:var(--warn);border-radius:8px;
+    padding:8px 12px;font-size:12.5px;line-height:1.6;
+  }
+
+  details.trace{border-top:1px dashed var(--line-strong);padding-top:10px}
+  details.trace>summary{
+    cursor:pointer;font-size:12.5px;color:var(--accent);font-weight:500;
+    list-style:none;display:flex;align-items:center;gap:6px;user-select:none;
+  }
+  details.trace>summary::-webkit-details-marker{display:none}
+  details.trace>summary::before{content:"▸";font-size:11px;transition:transform .15s}
+  details.trace[open]>summary::before{transform:rotate(90deg)}
+
+  .step{margin-top:12px;border-left:2px solid var(--line);padding-left:12px}
+  .step-title{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:500;margin-bottom:8px}
+  .step-title .n{
+    width:17px;height:17px;border-radius:50%;background:var(--accent-soft);color:var(--accent);
+    font-size:10.5px;display:flex;align-items:center;justify-content:center;font-weight:500;flex:none;
+  }
+  .step-title .sub{font-weight:400;color:var(--faint);font-size:11.5px}
+
+  .tags{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}
+  .tag{
+    font-family:var(--mono);font-size:11px;background:#f1f1ee;color:var(--muted);
+    border-radius:4px;padding:1px 6px;
+  }
+
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th{
+    text-align:left;font-weight:400;color:var(--faint);font-size:11.5px;
+    padding:0 8px 5px 0;border-bottom:1px solid var(--line);
+  }
+  td{padding:6px 8px 6px 0;border-bottom:1px solid rgba(20,20,20,.05);vertical-align:middle}
+  tr:last-child td{border-bottom:0}
+  tr.off td{opacity:.5}
+  td.num{color:var(--faint);width:22px;font-variant-numeric:tabular-nums}
+  td.name{word-break:break-all}
+  td.flag{width:70px;font-size:11px;color:var(--ok);white-space:nowrap}
+  tr.off td.flag{color:var(--faint)}
+  tr.low td.flag{color:var(--warn)}
+  .scorecell{display:flex;align-items:center;gap:8px;min-width:160px}
+  .bar{flex:1;height:5px;background:#eeeeea;border-radius:3px;overflow:hidden;min-width:60px}
+  .bar i{display:block;height:100%;background:var(--accent);border-radius:3px}
+  tr.off .bar i{background:#c8ccd2}
+  .scorecell span{font-family:var(--mono);font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums;width:52px;text-align:right}
+
+  pre{
+    font-family:var(--mono);font-size:12px;line-height:1.6;white-space:pre-wrap;word-break:break-word;
+    background:#fafaf8;border:1px solid var(--line);border-radius:8px;padding:10px 12px;
+    margin:6px 0 0;max-height:320px;overflow:auto;color:#2a2f36;
+  }
+  .sub-det{margin-top:6px}
+  .sub-det>summary{
+    cursor:pointer;font-size:12px;color:var(--muted);list-style:none;
+    display:flex;align-items:center;gap:5px;user-select:none;padding:2px 0;
+  }
+  .sub-det>summary::-webkit-details-marker{display:none}
+  .sub-det>summary::before{content:"▸";font-size:10px;color:var(--faint);transition:transform .15s}
+  .sub-det[open]>summary::before{transform:rotate(90deg)}
+  .kv{font-size:12.5px;color:var(--muted);display:flex;flex-direction:column;gap:4px}
+  .kv div{display:flex;gap:8px}
+  .kv b{font-weight:500;color:var(--ink);min-width:52px;flex:none}
+  .kv span{word-break:break-all;line-height:1.5}
+
+  /* ---------- 输入区 ---------- */
+  .composer{
+    display:flex;gap:10px;padding:14px 22px 20px;border-top:1px solid var(--line);
+    background:var(--panel);align-items:flex-end;
+  }
+  textarea{
+    flex:1;resize:none;border:1px solid var(--line-strong);border-radius:10px;
+    padding:10px 12px;font:inherit;font-size:13.5px;line-height:1.6;color:var(--ink);
+    background:var(--panel);outline:none;
+  }
+  textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .primary{
+    border:0;background:var(--accent);color:#fff;padding:10px 20px;border-radius:10px;
+    font:inherit;font-size:13.5px;font-weight:500;cursor:pointer;white-space:nowrap;
+  }
+  .primary:hover{background:#14538f}
+  .primary:disabled{background:#c3c9d1;cursor:not-allowed}
+
+  .loading{display:flex;align-items:center;gap:9px;color:var(--muted);font-size:13px}
+  .dotpulse{display:flex;gap:4px}
+  .dotpulse i{width:6px;height:6px;border-radius:50%;background:var(--accent);opacity:.35;animation:p 1s infinite}
+  .dotpulse i:nth-child(2){animation-delay:.15s}
+  .dotpulse i:nth-child(3){animation-delay:.3s}
+  @keyframes p{0%,100%{opacity:.25;transform:translateY(0)}50%{opacity:1;transform:translateY(-2px)}}
+
+  @media (max-width:860px){
+    .app{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+    .side{border-right:0;border-bottom:1px solid var(--line);flex-direction:row;flex-wrap:wrap;gap:10px;padding:12px}
+    .side .panel{flex:1;min-width:150px}
+    .foot{display:none}
+    .brand{width:100%}
+    .q{max-width:100%}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <div class="logo">R1</div>
+      <div>
+        <div class="brand-title">RAG 学习台</div>
+        <div class="brand-sub">阶段 1 · 手写 TF-IDF</div>
+      </div>
+    </div>
+
+    <section class="panel">
+      <div class="panel-title">运行状态</div>
+      <div class="row"><span>生成模式</span><span id="modeBadge" class="badge idle">检测中</span></div>
+      <div class="row"><span>库内条数</span><b id="kbCount">—</b></div>
+      <div class="row"><span>向量维度</span><b id="vocabSize">—</b></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title">检索后端</div>
+      <div class="segmented" id="backendGroup"></div>
+      <p class="hint">向量检索看语义，字面检索只看字面重合。同一个问题切一下，差别会很明显。</p>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title">召回数量 Top-K</div>
+      <div class="segmented" id="topkGroup">
+        <button data-k="1">1</button>
+        <button data-k="2" class="on">2</button>
+        <button data-k="3">3</button>
+      </div>
+      <p class="hint">Top-K 越大，模型看到的资料越多，也越容易被无关内容带偏。</p>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title">后端详情</div>
+      <div id="backendInfo" class="kv"><div><b>加载中</b><span>—</span></div></div>
+    </section>
+
+    <div class="foot" id="footNote">正在连接服务…</div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="topbar-title">每次提问都会展开：分词 → 召回 → Prompt → 生成</div>
+      <button id="clearBtn" class="ghost" type="button">清空对话</button>
+    </header>
+
+    <div id="chat" class="chat"></div>
+
+    <div class="composer">
+      <textarea id="input" rows="2" placeholder="问点什么，例如：商品支持七天无理由退货吗"></textarea>
+      <button id="send" class="primary" type="button">发送</button>
+    </div>
+  </main>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var state = { topK: 2, busy: false, backend: null, backends: [] };
+  var chatEl = document.getElementById("chat");
+  var inputEl = document.getElementById("input");
+  var sendEl = document.getElementById("send");
+
+  var SAMPLES = [
+    "被借了钱只有录音，能要回来吗",
+    "菲律宾有什么值得买的特产",
+    "氮氧化物中毒会有什么症状",
+    "灵越7590 的散热和屏幕怎么样"
+  ];
+
+  function esc(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  function num(n) { return Number(n || 0).toLocaleString("zh-CN"); }
+
+  /* ---------------- 空状态 ---------------- */
+  function renderEmpty() {
+    chatEl.innerHTML =
+      '<div class="empty">' +
+        '<h1>可视化 RAG：看见每一步</h1>' +
+        '<p>提问后，回答下方会展开完整链路：问题被切成哪些 token、每篇文档的相似度得分、' +
+        '哪些被 Top-K 截掉、最终发给大模型的 Prompt 原文，以及各阶段耗时。</p>' +
+        '<div class="chips">' +
+          SAMPLES.map(function (q) {
+            return '<button type="button" data-q="' + esc(q) + '">' + esc(q) + "</button>";
+          }).join("") +
+        "</div>" +
+      "</div>";
+  }
+
+  /* ---------------- 后端元信息 ---------------- */
+  function findBackend(name) {
+    var list = state.backends || [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].name === name) return list[i];
+    }
+    return null;
+  }
+
+  function shortLabel(b) {
+    // 后端名由服务端给，别在前端写死，否则加一个集合就要改一次代码
+    return b.short || b.label || b.name;
+  }
+
+  function renderBackends() {
+    var box = document.getElementById("backendGroup");
+    box.innerHTML = (state.backends || []).map(function (b) {
+      return '<button type="button" data-b="' + esc(b.name) + '" class="' +
+        (b.name === state.backend ? "on" : "") + '">' + esc(shortLabel(b)) + "</button>";
+    }).join("");
+  }
+
+  function renderBackendInfo() {
+    var b = findBackend(state.backend);
+    if (!b) return;
+
+    var rows = [
+      ["后端", b.label],
+      ["类型", b.collection ? (b.chunked ? "切片（384 / 64）" : "整篇文档") : "稀疏向量"],
+      ["条数", num(b.size)],
+      ["维度", b.dim ? b.dim + " 维" : "—"],
+      ["模型", b.model],
+      ["相似度", b.space === "cosine" ? "余弦" : b.space],
+      ["位置", b.persist_dir]
+    ];
+
+    document.getElementById("backendInfo").innerHTML = rows.map(function (r) {
+      return "<div><b>" + esc(r[0]) + "</b><span>" + esc(r[1]) + "</span></div>";
+    }).join("");
+
+    document.getElementById("kbCount").textContent = num(b.size);
+    document.getElementById("vocabSize").textContent = b.dim ? b.dim + " 维" : "—";
+    document.getElementById("footNote").textContent = b.collection
+      ? "Chroma 持久化向量库 · bge-small-zh-v1.5 · 余弦距离"
+      : "TF-IDF 稀疏向量 · 纯 Python · 暴力扫描";
+  }
+
+  function loadMeta() {
+    fetch("/api/kb").then(function (r) { return r.json(); }).then(function (d) {
+      if (d.error) throw new Error(d.error);
+
+      state.backends = d.backends || [];
+      state.backend = d.default;
+
+      var badge = document.getElementById("modeBadge");
+      if (d.llm_ready) {
+        badge.className = "badge llm";
+        badge.textContent = "真实大模型";
+      } else {
+        badge.className = "badge mock";
+        badge.textContent = "模拟模式";
+      }
+
+      renderBackends();
+      renderBackendInfo();
+
+      // 一个后端都没有：说明库里没数据，直接把话说明白，别让用户对着空输入框猜
+      if (!state.backends.length) {
+        document.getElementById("backendInfo").innerHTML =
+          '<div><b>空库</b><span>还没有任何向量集合</span></div>';
+        document.getElementById("kbCount").textContent = "0";
+        document.getElementById("vocabSize").textContent = "—";
+        document.getElementById("footNote").textContent = "向量库为空 · 等待灌库";
+        inputEl.disabled = true;
+        sendEl.disabled = true;
+        inputEl.placeholder = "向量库为空，先执行 scripts/ingest_chroma.py 灌库";
+        chatEl.innerHTML =
+          '<div class="empty"><h1>向量库还是空的</h1>' +
+          "<p>没有可检索的数据。先在终端跑一次灌库，完成后刷新本页：</p>" +
+          '<p><code>python scripts/ingest_chroma.py --limit 2000 --chunked</code></p></div>';
+      }
+    }).catch(function (e) {
+      document.getElementById("backendInfo").innerHTML =
+        "<div><b>连接失败</b><span>" + esc(e.message) + "</span></div>";
+    });
+  }
+
+  /* ---------------- 渲染一条完整记录 ---------------- */
+  function traceHtml(d) {
+    var c = d.retrieval.candidates;
+    var maxScore = 0;
+    c.forEach(function (x) { if (x.score > maxScore) maxScore = x.score; });
+    if (maxScore <= 0) maxScore = 1;
+
+    var FLAG_TEXT = { selected: "入选", over_k: "超出 Top-K", low_score: "低于阈值" };
+
+    var rows = c.map(function (x) {
+      var pct = x.score > 0 ? Math.max(2, (x.score / maxScore) * 100) : 0;
+      var cls = x.selected ? "" : (x.flag === "low_score" ? "off low" : "off");
+      return '<tr class="' + cls + '">' +
+        '<td class="num">' + x.rank + "</td>" +
+        '<td class="name">' + esc(x.title) + "</td>" +
+        '<td><div class="scorecell"><div class="bar"><i style="width:' + pct.toFixed(1) + '%"></i></div>' +
+          "<span>" + x.score.toFixed(4) + "</span></div></td>" +
+        '<td class="flag">' + (FLAG_TEXT[x.flag] || "—") + "</td>" +
+      "</tr>";
+    }).join("");
+
+    var tags = d.backend.collection
+      ? '<span class="tag">query → ' + d.backend.dim + " 维稠密向量</span>" +
+        '<span class="tag">cosine</span><span class="tag">HNSW</span>'
+      : d.retrieval.query_tokens.map(function (t) {
+          return '<span class="tag">' + esc(t) + "</span>";
+        }).join("");
+
+    var ctx = d.contexts.length
+      ? d.contexts.map(function (x) {
+          return '<details class="sub-det"><summary>资料 ' + x.rank + " · " + esc(x.title) +
+            " · 得分 " + x.score.toFixed(4) + " · " + num(x.text.length) + " 字</summary>" +
+            "<pre>" + esc(x.text) + "</pre></details>";
+        }).join("")
+      : '<div class="notice">没有文档达到相似度阈值，本次不调用大模型，直接拒答。</div>';
+
+    return '<details class="trace" open>' +
+      "<summary>展开 / 收起本次 RAG 全过程</summary>" +
+
+      '<div class="step">' +
+        '<div class="step-title"><span class="n">1</span>检索 Retrieval' +
+          '<span class="sub">' + (d.backend.collection
+            ? (d.backend.chunked
+                ? "问题转向量 → HNSW 近邻 → 按 pid 去重 → Top-K"
+                : "问题转向量 → HNSW 近邻 → 取 Top-K")
+            : "问题分词 → 逐篇算相似度 → 取 Top-K") + "</span></div>" +
+        '<div class="tags">' + tags + "</div>" +
+        "<table><thead><tr><th></th><th>文档</th><th>相似度（相对最高分）</th><th></th></tr></thead>" +
+        "<tbody>" + rows + "</tbody></table>" +
+        '<p class="hint">入选 = 进入 Prompt　·　超出 Top-K = 查到了但名额不够　·　低于阈值 = 根本没查到相关内容</p>' +
+      "</div>" +
+
+      '<div class="step">' +
+        '<div class="step-title"><span class="n">2</span>上下文 Context' +
+          '<span class="sub">真正拼进 Prompt 的 ' + d.contexts.length + " 篇</span></div>" +
+        ctx +
+      "</div>" +
+
+      '<div class="step">' +
+        '<div class="step-title"><span class="n">3</span>Prompt' +
+          '<span class="sub">' + num(d.prompt.chars) + " 字符</span></div>" +
+        '<details class="sub-det"><summary>system 消息（锁定角色与规则）</summary>' +
+          "<pre>" + esc(d.prompt.system) + "</pre></details>" +
+        '<details class="sub-det"><summary>user 消息（资料 + 问题）</summary>' +
+          "<pre>" + esc(d.prompt.user) + "</pre></details>" +
+      "</div>" +
+
+      '<div class="step">' +
+        '<div class="step-title"><span class="n">4</span>生成 Generation</div>' +
+        '<div class="kv">' +
+          "<div><b>模式</b><span>" + (d.answer.mode === "llm" ? "真实大模型调用" : "模拟模式（摘抄，非生成）") + "</span></div>" +
+          "<div><b>模型</b><span>" + esc(d.answer.model) + "</span></div>" +
+          "<div><b>耗时</b><span>检索 " + d.timings.retrieval_ms + " ms　生成 " +
+            d.timings.generation_ms + " ms　合计 " + d.timings.total_ms + " ms</span></div>" +
+        "</div>" +
+      "</div>" +
+    "</details>";
+  }
+
+  function renderTurn(d) {
+    var wrap = document.createElement("div");
+    wrap.className = "turn";
+
+    var modeBadge = d.answer.mode === "llm"
+      ? '<span class="badge llm">真实模型</span>'
+      : (d.answer.mode === "empty"
+          ? '<span class="badge mock">检索为空 · 已拒答</span>'
+          : '<span class="badge mock">模拟模式</span>');
+
+    var errBox = d.answer.error
+      ? '<div class="err">模型调用失败，已降级为模拟输出：\n' + esc(d.answer.error) + "</div>"
+      : "";
+
+    wrap.innerHTML =
+      '<div class="q">' + esc(d.question) + "</div>" +
+      '<div class="card">' +
+        '<div class="card-head">' + modeBadge +
+          '<span class="badge be">' + esc(shortLabel(d.backend)) + "</span>" +
+          '<span class="who">' + esc(d.answer.model) + "</span>" +
+          '<span class="spacer"></span>' +
+          '<span class="metric">检索 ' + d.timings.retrieval_ms + " ms</span>" +
+          '<span class="metric">生成 ' + d.timings.generation_ms + " ms</span>" +
+          '<span class="metric">Prompt ' + num(d.prompt.chars) + " 字符</span>" +
+        "</div>" +
+        errBox +
+        '<div class="answer">' + esc(d.answer.text) + "</div>" +
+        traceHtml(d) +
+      "</div>";
+
+    chatEl.appendChild(wrap);
+    chatEl.scrollTop = chatEl.scrollHeight;
+  }
+
+  function appendLoading(question) {
+    var wrap = document.createElement("div");
+    wrap.className = "turn";
+    wrap.dataset.loading = "1";
+    wrap.innerHTML =
+      '<div class="q">' + esc(question) + "</div>" +
+      '<div class="card"><div class="loading"><div class="dotpulse"><i></i><i></i><i></i></div>' +
+      "<span>检索知识库并生成回答…</span></div></div>";
+    chatEl.appendChild(wrap);
+    chatEl.scrollTop = chatEl.scrollHeight;
+    return wrap;
+  }
+
+  function appendError(question, message) {
+    var wrap = document.createElement("div");
+    wrap.className = "turn";
+    wrap.innerHTML =
+      '<div class="q">' + esc(question) + "</div>" +
+      '<div class="card"><div class="err">' + esc(message) + "</div></div>";
+    chatEl.appendChild(wrap);
+    chatEl.scrollTop = chatEl.scrollHeight;
+  }
+
+  /* ---------------- 提问 ---------------- */
+  function ask(question) {
+    question = String(question || "").trim();
+    if (!question || state.busy) return;
+
+    if (chatEl.querySelector(".empty")) chatEl.innerHTML = "";
+
+    state.busy = true;
+    sendEl.disabled = true;
+    inputEl.value = "";
+    var loading = appendLoading(question);
+
+    fetch("/api/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question: question, top_k: state.topK, backend: state.backend })
+    })
+      .then(function (r) {
+        return r.json().then(function (body) { return { ok: r.ok, body: body }; });
+      })
+      .then(function (res) {
+        if (loading.parentNode) loading.parentNode.removeChild(loading);
+        if (!res.ok || res.body.error) {
+          appendError(question, res.body.error || "请求失败");
+          return;
+        }
+        renderTurn(res.body);
+      })
+      .catch(function (e) {
+        if (loading.parentNode) loading.parentNode.removeChild(loading);
+        appendError(question, "网络错误：" + e.message);
+      })
+      .finally(function () {
+        state.busy = false;
+        sendEl.disabled = false;
+        inputEl.focus();
+      });
+  }
+
+  /* ---------------- 事件绑定 ---------------- */
+  sendEl.addEventListener("click", function () { ask(inputEl.value); });
+
+  inputEl.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      ask(inputEl.value);
+    }
+  });
+
+  document.getElementById("backendGroup").addEventListener("click", function (e) {
+    var btn = e.target.closest("button[data-b]");
+    if (!btn || state.busy) return;
+    state.backend = btn.dataset.b;
+    renderBackends();
+    renderBackendInfo();
+    inputEl.focus();
+  });
+
+  document.getElementById("topkGroup").addEventListener("click", function (e) {
+    var btn = e.target.closest("button[data-k]");
+    if (!btn) return;
+    state.topK = parseInt(btn.dataset.k, 10);
+    Array.prototype.forEach.call(this.children, function (b) {
+      b.classList.toggle("on", b === btn);
+    });
+  });
+
+  chatEl.addEventListener("click", function (e) {
+    var btn = e.target.closest("button[data-q]");
+    if (btn) ask(btn.dataset.q);
+  });
+
+  document.getElementById("clearBtn").addEventListener("click", function () {
+    renderEmpty();
+    inputEl.focus();
+  });
+
+  renderEmpty();
+  loadMeta();
+  inputEl.focus();
+})();
+</script>
+</body>
+</html>

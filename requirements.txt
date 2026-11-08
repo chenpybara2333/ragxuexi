@@ -1,0 +1,10 @@
+# 阶段 1：HTTP 请求库
+# 版本说明：requests>=2.31 支持 Python 3.13，且 API 稳定；本项目在 2.34.x 上验证通过
+requests>=2.31.0,<3.0.0
+
+# 阶段 4：向量数据库 + 中文 embedding
+# chromadb 自带 HNSW 索引与持久化；fastembed 用 ONNX 跑 bge，不需要装 torch（省 2GB）
+# 安装建议走国内镜像（清华源在本机代理环境下不可用，阿里云可用）：
+#   pip install -i https://mirrors.aliyun.com/pypi/simple -r requirements.txt
+chromadb>=0.5.20
+fastembed>=0.3.6

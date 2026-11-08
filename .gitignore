@@ -1,0 +1,28 @@
+# 密钥绝不进版本库
+.env
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 阶段 4：向量库落盘文件与 embedding 模型缓存（都很大，不进版本库）
+vector_store/
+.model_cache/
+*.faiss
+*.index
+
+# 原始语料 3.6GB，不进版本库
+collection.tsv
+
+# 运行日志（每次启动都会重写，没有版本价值）
+*.log
+
+# 本地工作记录（会话笔记，属于个人过程产物，不进团队仓库）
+.workbuddy/
+
+# 操作系统杂项
+.DS_Store
+Thumbs.db
+desktop.ini
