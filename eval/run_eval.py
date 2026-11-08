@@ -26,6 +26,7 @@ sys.path.insert(0, str(ROOT))
 from rag.chroma_store import ChromaStore  # noqa: E402
 from rag.hybrid import build_hybrid  # noqa: E402
 from rag.multiquery import MultiQueryRetriever  # noqa: E402
+from rag.reranker import RerankRetriever  # noqa: E402
 
 PERSIST = ROOT / "vector_store" / "chroma"
 
@@ -72,18 +73,19 @@ def main() -> None:
     parser.add_argument("--recall-n", type=int, default=50, help="hybrid 模式下每路召回多少条")
     parser.add_argument(
         "--mode",
-        choices=["dense", "hybrid", "rewrite"],
+        choices=["dense", "hybrid", "rewrite", "rerank"],
         default="dense",
-        help="dense=只用向量；hybrid=BM25+向量+RRF；rewrite=多查询改写（会调模型）",
+        help="dense=向量；hybrid=BM25+向量+RRF；rewrite=多查询改写；rerank=混合+Cross-Encoder 重排",
     )
     parser.add_argument("--n-variants", type=int, default=3, help="rewrite 模式生成几个变体")
+    parser.add_argument("--rerank-n", type=int, default=20, help="rerank 模式粗排取多少条候选")
     args = parser.parse_args()
 
     questions = load_questions(Path(args.file))
     store = ChromaStore(PERSIST, args.collection)
 
     retriever: object = store
-    if args.mode in ("hybrid", "rewrite"):
+    if args.mode in ("hybrid", "rewrite", "rerank"):
         print("[构建] BM25 索引（需要把全部 chunk 重新分词）…")
         built = time.perf_counter()
         hybrid = build_hybrid(store, recall_n=args.recall_n)
@@ -99,6 +101,15 @@ def main() -> None:
             print(
                 f"[构建] 多查询改写：每个问题 {args.n_variants} 个变体 + 原问题，"
                 f"共 {len(questions)} 次模型调用（会比较慢）"
+            )
+        elif args.mode == "rerank":
+            print("[构建] 加载 Cross-Encoder 重排模型…")
+            built = time.perf_counter()
+            retriever = RerankRetriever(hybrid, top_n=args.rerank_n)
+            retriever.search("预热", top_k=3)
+            print(
+                f"       粗排取 {args.rerank_n} 条候选精排｜"
+                f"模型加载+预热 {time.perf_counter() - built:.1f}s"
             )
 
     print(
@@ -218,8 +229,9 @@ def main() -> None:
         "",
         f"- 时间：{time.strftime('%Y-%m-%d %H:%M:%S')}",
         f"- 模式：`{args.mode}`"
-        + ("（每路召回 %d 条）" % args.recall_n if args.mode in ("hybrid", "rewrite") else "")
-        + ("（每问题 %d 个变体 + 原问题）" % args.n_variants if args.mode == "rewrite" else ""),
+        + ("（每路召回 %d 条）" % args.recall_n if args.mode in ("hybrid", "rewrite", "rerank") else "")
+        + ("（每问题 %d 个变体 + 原问题）" % args.n_variants if args.mode == "rewrite" else "")
+        + ("（粗排取 %d 条精排）" % args.rerank_n if args.mode == "rerank" else ""),
         f"- 集合：`{args.collection}`（{store.size:,} 条）",
         f"- 模型：{store.info()['model']}（{store.info()['dim']} 维）",
         f"- 问题集：`{Path(args.file).name}`（{len(records)} 条）",

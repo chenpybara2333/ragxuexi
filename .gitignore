@@ -26,3 +26,6 @@ collection.tsv
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# 外部数据集（350MB，中文医疗语料，非本项目产物）
+med_zh/

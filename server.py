@@ -18,6 +18,7 @@
 
 import argparse
 import json
+import os
 import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -26,12 +27,16 @@ from pathlib import Path
 from rag.chroma_store import ChromaStore, list_collections
 from rag.hybrid import build_hybrid
 from rag.llm import is_llm_configured
-from rag.multiquery import MultiQueryRetriever
 from rag.pipeline import run_rag
+from rag.reranker import RerankRetriever
 
 ROOT_DIR = Path(__file__).resolve().parent
 WEB_DIR = ROOT_DIR / "web"
 CHROMA_DIR = ROOT_DIR / "vector_store" / "chroma"
+
+# 重排候选数。实测 10 条是精度拐点：再往上 R@1 不再提升，延迟线性上涨。
+# 5 条 → 1.3s / R@1 91%；10 条 → 2.6s / R@1 93%；20 条 → 5.6s / R@1 93%
+RERANK_TOP_N = int(os.getenv("RERANK_TOP_N", "10"))
 
 # 可用的检索后端。key 是给前端的标识，value 是实现了 search/size/info 的对象。
 # 现在只有 Chroma 各集合；TF-IDF 后端已移除（原始 txt 知识库不再维护）。
@@ -199,11 +204,24 @@ def main() -> None:
                     f"建索引 {time.perf_counter() - built:.1f}s）"
                 )
 
-                # 再挂一个多查询改写后端。注意它每次提问都要多调一次模型，
-                # 所以不设为默认，由用户在前端切换。
-                rw_key = f"{item['name']}+rewrite"
-                RETRIEVERS[rw_key] = MultiQueryRetriever(hybrid, n_variants=3)
-                print(f"[启动] 多查询改写后端：{rw_key}（每次提问 +1 次模型调用）")
+                # Cross-Encoder 重排后端：精度最好（R@1 93%），但每次多 2-3 秒。
+                # 不设为默认——默认走速度快的 hybrid，需要精度时前端切换。
+                warm = time.perf_counter()
+                rerank_retriever = RerankRetriever(hybrid, top_n=RERANK_TOP_N)
+                rerank_retriever.search("预热", top_k=1)   # 触发模型加载，避免首个请求干等
+
+                rr_key = f"{item['name']}+rerank"
+                RETRIEVERS[rr_key] = rerank_retriever
+                print(
+                    f"[启动] 重排后端：{rr_key}"
+                    f"（粗排 {RERANK_TOP_N} 条精排，模型加载 {time.perf_counter() - warm:.1f}s）"
+                )
+
+                # 多查询改写后端【已下线】，不在此注册。
+                # 原因：LLM 改写虽有收益（R@5 95%→100%），但每次提问要多等 2-14 秒，
+                # 且延迟随网关状态波动 6.7 倍，不可控；R@1 反而下降 1 条。
+                # 代码与结论保留：rag/query_rewrite.py、rag/multiquery.py、eval/report.rewrite.md
+                # 需要复现实验时：python eval/run_eval.py --mode rewrite
 
         if registered:
             # 默认优先混合检索（评测 93% vs 纯向量 88%），其次切片，最后整篇
