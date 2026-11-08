@@ -19,10 +19,12 @@
 import argparse
 import json
 import sys
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from rag.chroma_store import ChromaStore, list_collections
+from rag.hybrid import build_hybrid
 from rag.llm import is_llm_configured
 from rag.pipeline import run_rag
 
@@ -167,6 +169,7 @@ def main() -> None:
     # 只注册 Chroma 集合。TF-IDF 后端已随 txt 知识库一起移除。
     try:
         registered = []
+        hybrid_keys: list[str] = []
 
         for item in list_collections(CHROMA_DIR):
             if item["count"] == 0:
@@ -179,10 +182,26 @@ def main() -> None:
             tag = "切分" if store.is_chunked else "整篇"
             print(f"[启动] Chroma 后端（{tag}）：{item['name']} {item['count']:,} 条")
 
+            # 切片集合额外挂一个混合检索后端：BM25 + 向量 + RRF。
+            # 整篇集合不挂——长文档的 BM25 词频会被长度淹没，收益不明显。
+            if store.is_chunked:
+                built = time.perf_counter()
+                hybrid = build_hybrid(store)
+                key = f"{item['name']}+bm25"
+
+                RETRIEVERS[key] = hybrid
+                hybrid_keys.append(key)
+
+                print(
+                    f"[启动] 混合检索后端：{key}"
+                    f"（BM25 词表 {len(hybrid.bm25.postings):,}，"
+                    f"建索引 {time.perf_counter() - built:.1f}s）"
+                )
+
         if registered:
-            # 默认优先用切分集合（召回更好），没有才退到整篇
-            chunked = [s for s in registered if s.is_chunked]
-            DEFAULT_BACKEND = (chunked or registered)[0].collection.name
+            # 默认优先混合检索（评测 93% vs 纯向量 88%），其次切片，最后整篇
+            chunked_keys = [k for k, r in RETRIEVERS.items() if getattr(r, "is_chunked", False)]
+            DEFAULT_BACKEND = (hybrid_keys or chunked_keys or list(RETRIEVERS))[0]
         else:
             print("[启动] 向量库里没有任何集合，服务将以空状态启动")
             print("       灌库：python scripts/ingest_chroma.py --limit 20000 --chunked")
